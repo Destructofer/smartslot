@@ -11,10 +11,9 @@ const MapaController = (() => {
 
   /* ─── Estado del mapa ──────────────────────────────────────── */
   let _filtroActivo  = 'all';
-  let _filtroZona    = null;   // "A","B","C","D","E" o null = sin filtro zona
+  let _filtroZona    = null;
   let _celdaActiva   = null;
-  let _estadoExtra   = {};     // celdas con estado temporal (suggested, confirmed)
-
+  let _estadoExtra   = {};
   /* ─── Mapa de colores por zona de cliente ──────────────────── */
   const ZONA_COLORES = {
     A: { bg: '#3fb95022', border: '#3fb950', label: 'Marca Propia', texto: '#3fb950' },
@@ -214,14 +213,13 @@ const MapaController = (() => {
         grid.appendChild(h);
       });
 
-      // Filas de datos
+      // 91 filas: bloques normales para AP/BP/EP/FP-MP, sub-grids para CP/DP
       for (let row = 1; row <= TOTAL_ROWS; row++) {
         PASILLOS.forEach(p => {
           if (SUB_SET.has(p)) {
-            const container     = document.createElement('div');
+            const container = document.createElement('div');
             container.dataset.aisle = p;
             let hasAny = false;
-
             for (let sub = 1; sub <= 3; sub++) {
               const num = (row - 1) * 3 + sub;
               if (num <= LIMITES[p]) {
@@ -232,7 +230,6 @@ const MapaController = (() => {
                 hasAny = true;
               }
             }
-
             container.className = hasAny ? 'sub-grid-container' : 'map-empty-cell';
             grid.appendChild(container);
           } else {

@@ -567,6 +567,24 @@
         <button class="btn-3d-ctrl" onclick="Mapa3DController.setVista('top')">Planta</button>
         <button class="btn-3d-ctrl" onclick="Mapa3DController.setVista('front')">Frontal</button>
         <button class="btn-3d-ctrl" onclick="Mapa3DController.setVista('iso')">Isométrica</button>
+        <span class="sep-3d">|</span>
+        <button class="btn-3d-ctrl" id="btn-fp-mode" onclick="Mapa3DController.entrarPrimeraPersona()">👁️ 1ª Persona</button>
+      </div>
+
+      <!-- HUD de primera persona (oculto por defecto) -->
+      <div id="fp-hud" style="display:none">
+        <div id="fp-top-bar">
+          <span style="color:var(--cyan);font-weight:600">👁️ Primera Persona</span>
+          <span style="opacity:.55;font-size:11px">W·A·S·D mover &nbsp;|&nbsp; Ratón mirar &nbsp;|&nbsp; Shift correr &nbsp;|&nbsp; ESC salir</span>
+          <button id="fp-exit-btn" onclick="Mapa3DController.salirPrimeraPersona()">✕ Salir</button>
+        </div>
+        <div id="fp-crosshair">
+          <div class="fp-ch-h"></div>
+          <div class="fp-ch-v"></div>
+        </div>
+        <div id="fp-bottom-bar">
+          <span id="fp-pos-label">Pasillo — · Pos. 0</span>
+        </div>
       </div>
     </div>
   </div>
@@ -841,6 +859,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
 });
 </script>
+
+  <!-- Modal: detalle de alerta -->
+  <div id="modal-alerta" class="modal-overlay" onclick="if(event.target===this)this.style.display='none'">
+    <div class="modal-card">
+      <button class="modal-close" onclick="document.getElementById('modal-alerta').style.display='none'">✕</button>
+      <div id="modal-alerta-content"></div>
+    </div>
+  </div>
 
 </body>
 </html>

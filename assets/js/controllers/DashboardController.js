@@ -134,7 +134,7 @@ const DashboardController = (() => {
       }
 
       contenedor.innerHTML = alertas.map(a => `
-        <div class="alerta-item">
+        <div class="alerta-item" onclick="DashboardController.mostrarDetalleAlerta('${a.celda}')">
           <span class="badge ${a.dias <= 1 ? 'alta' : a.dias <= 3 ? 'media' : 'baja'}">
             ${a.dias === 0 ? '¡LLENA!' : `${a.dias}d`}
           </span>
@@ -197,11 +197,128 @@ const DashboardController = (() => {
      * @param {string|null} sku
      */
     registrarRecepcion(celda, sku) {
-      // Actualiza score de salud en tiempo real
       this.renderSalud();
-      // Actualiza alertas
       this.renderAlertas();
       console.log(`[DashboardController] Recepción registrada: ${celda} · SKU ${sku}`);
+    },
+
+    /**
+     * Muestra el modal de detalle para una alerta
+     * @param {string} celda
+     */
+    mostrarDetalleAlerta(celda) {
+      const modal   = document.getElementById('modal-alerta');
+      const content = document.getElementById('modal-alerta-content');
+      if (!modal || !content) return;
+
+      const occ     = UbicacionModel.obtenerOcupacion(celda);
+      const producto = UbicacionModel.obtenerProducto(celda);
+      const zona    = UbicacionModel.obtenerZona(celda);
+      const enRuta  = UbicacionModel.estaEnRuta(celda);
+      const x       = UbicacionModel.obtenerX(celda);
+      const dias    = SimuladorService.predecirLlenado(celda) ?? 0;
+
+      const ZONA_LABELS = { A:'Marca Propia', B:'Alta Rotación', C:'Grupo Nestlé', D:'Infantil / Baja rot.', E:'Desborde / Overflow' };
+      const ZONA_COLORS = { A:'#3fb950', B:'#06b6d4', C:'#a855f7', D:'#fbbf24', E:'#ef4444' };
+      const zonaColor   = ZONA_COLORS[zona] || 'var(--accent)';
+      const zonaLabel   = ZONA_LABELS[zona]  || zona;
+
+      const occColor = occ >= 95 ? 'var(--red)' : occ >= 85 ? '#f97316' : 'var(--amber)';
+      const distancia = x * 8;
+
+      // Nivel de urgencia
+      let urgenciaTitulo, urgenciaDesc, urgenciaBg;
+      if (dias === 0) {
+        urgenciaTitulo = '🚨 Capacidad máxima alcanzada';
+        urgenciaDesc   = 'Esta ubicación ya no tiene espacio disponible. Cualquier nueva recepción asignada aquí generará un error operativo. Se requiere acción inmediata.';
+        urgenciaBg     = 'rgba(239,68,68,.12)';
+      } else if (dias === 1) {
+        urgenciaTitulo = '⚠️ Se llena en menos de 24 horas';
+        urgenciaDesc   = 'El ritmo actual de entrada de producto agotará el espacio disponible mañana. Sin intervención, esta ubicación bloqueará nuevas recepciones.';
+        urgenciaBg     = 'rgba(249,115,22,.12)';
+      } else if (dias <= 3) {
+        urgenciaTitulo = `⏳ Se llena en ${dias} días`;
+        urgenciaDesc   = `Con el flujo actual, esta ubicación alcanzará el 100% de ocupación en ${dias} días. Es momento de planificar la redistribución del inventario.`;
+        urgenciaBg     = 'rgba(251,191,36,.10)';
+      } else {
+        urgenciaTitulo = `📊 Ocupación elevada — ${dias} días restantes`;
+        urgenciaDesc   = `La ocupación supera el 75%. Aunque hay margen, conviene monitorear de cerca y considerar redistribución preventiva.`;
+        urgenciaBg     = 'rgba(6,182,212,.10)';
+      }
+
+      // Acción recomendada
+      let accion;
+      if (dias <= 1) {
+        accion = `Reasigna de inmediato los productos de menor rotación a pasillos con más espacio (LP, MP o KP). Verifica si hay SKUs de alta rotación que deban estar más cerca del despacho.`;
+      } else if (dias <= 3) {
+        accion = `Planifica en las próximas horas la redistribución de al menos 2–3 SKUs hacia ubicaciones con < 60% de ocupación. Usa el módulo de Recepción para obtener sugerencias de destino.`;
+      } else {
+        accion = `Monitorea diariamente. Si la tendencia continúa, programa una redistribución antes de que supere el 90%. Usa el filtro de "Alta" en el Mapa para identificar otras ubicaciones críticas.`;
+      }
+
+      content.innerHTML = `
+        <div class="modal-celda-id" style="color:${occColor}">${celda}</div>
+        <div style="font-size:13px;color:var(--muted);margin-bottom:4px">${producto}</div>
+
+        <div style="display:flex;align-items:center;gap:8px;margin:12px 0 2px">
+          <span style="font-size:22px;font-weight:800;color:${occColor}">${occ}%</span>
+          <span style="font-size:12px;color:var(--muted)">de ocupación</span>
+        </div>
+        <div class="modal-occ-bar-wrap">
+          <div class="modal-occ-bar-fill" style="width:${occ}%;background:${occColor}"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--dim);margin-bottom:6px">
+          <span>0%</span><span>50%</span><span>100%</span>
+        </div>
+
+        <div class="modal-section">
+          <div class="modal-row">
+            <span class="modal-row-icon">📍</span>
+            <div>
+              <div class="modal-row-label">Zona</div>
+              <div class="modal-row-value" style="color:${zonaColor}">Zona ${zona} — ${zonaLabel}</div>
+            </div>
+          </div>
+          <div class="modal-row">
+            <span class="modal-row-icon">📏</span>
+            <div>
+              <div class="modal-row-label">Distancia al despacho</div>
+              <div class="modal-row-value">~${distancia} metros (Pasillo ${celda.replace(/\d.*$/,'')})</div>
+            </div>
+          </div>
+          <div class="modal-row">
+            <span class="modal-row-icon">${enRuta ? '🛒' : '⬜'}</span>
+            <div>
+              <div class="modal-row-label">Ruta de picking</div>
+              <div class="modal-row-value" style="color:${enRuta ? 'var(--purple)' : 'var(--muted)'}">
+                ${enRuta ? '★ Ubicación en ruta activa — impacto directo en operaciones' : 'No está en la ruta de picking activa'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-urgencia-box" style="background:${urgenciaBg};border:1px solid ${occColor}44">
+          <strong style="color:${occColor}">${urgenciaTitulo}</strong>
+          <p style="margin:6px 0 0;color:var(--text)">${urgenciaDesc}</p>
+        </div>
+
+        <div class="modal-accion-box">
+          <strong style="color:var(--accent);font-size:11px;letter-spacing:.5px">ACCIÓN RECOMENDADA</strong>
+          <p style="margin:6px 0 0;color:var(--text)">${accion}</p>
+        </div>
+
+        <div style="margin-top:16px;display:flex;gap:8px">
+          <button class="btn primary" onclick="
+            document.getElementById('modal-alerta').style.display='none';
+            const t=document.querySelector('.nav-tab[onclick*=mapa]');
+            showPanel('mapa',t);
+            requestAnimationFrame(()=>requestAnimationFrame(()=>MapaController?.buscar('${celda}')));
+          ">🗺️ Ver en mapa</button>
+          <button class="btn" onclick="document.getElementById('modal-alerta').style.display='none'">Cerrar</button>
+        </div>
+      `;
+
+      modal.style.display = 'flex';
     },
 
     /* ─── WALDO ─────────────────────────────────────────────── */
