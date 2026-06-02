@@ -102,9 +102,10 @@ const RecepcionController = (() => {
             <button class="btn" onclick="RecepcionController.verEnMapa('${s.celda}')">
               Ver en mapa
             </button>
+            ${i === 0 ? `
             <button class="btn primary" onclick="RecepcionController.confirmar('${s.celda}')">
               ✓ Confirmar ubicación
-            </button>
+            </button>` : ''}
           </div>
         </div>
       `;
@@ -209,15 +210,7 @@ const RecepcionController = (() => {
       _estadoActual.confirmada = celda;
       MapaController?.resaltarCelda(celda, 'confirmed');
       DashboardController?.registrarRecepcion(celda, _estadoActual.sku);
-
-      const card = document.querySelector(`#panel-sugerencias .result-card[data-celda="${celda}"]`);
-      if (card) card.remove();
-
-      const contenedor = document.getElementById('panel-sugerencias');
-      if (contenedor && !contenedor.querySelector('.result-card')) {
-        contenedor.classList.remove('show');
-      }
-
+      this.limpiar();
       this.mostrarToast(`✓ Registrado en ${celda}`, 'ok');
     },
 

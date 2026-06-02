@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SmartSlot AI — WMS Inteligente | Justo</title>
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════
+     TOPBAR
+════════════════════════════════════════════════════════════ -->
+<header class="topbar">
+  <div>
+    <div class="logo">SMART<span>///</span>SLOT <span style="color:var(--purple)">AI</span></div>
+    <div class="logo-sub">WMS Inteligente · Justo · SIS-HACK 2026</div>
+  </div>
+  <div class="status-dot" title="Sistema en línea"></div>
+  <span style="font-size:12px;color:var(--muted)">Datos reales · Noviembre 2025</span>
+
+  <nav class="nav-tabs">
+    <button class="nav-tab active" onclick="showPanel('recepcion',this)">📦 Recepción</button>
+    <button class="nav-tab"        onclick="showPanel('mapa',this)">🗺️ Mapa</button>
+    <button class="nav-tab"        onclick="showPanel('dashboard',this)">📊 Dashboard</button>
+    <button class="nav-tab"        onclick="showPanel('ruta',this)">🛒 Ruta</button>
+    <button class="nav-tab"        onclick="showPanel('historico',this)">📈 Histórico</button>
+  </nav>
+
+  <!-- Selector de temas -->
+  <div class="theme-selector" style="margin-left:12px">
+    <button class="theme-trigger" onclick="document.getElementById('theme-dropdown').classList.toggle('show')">
+      🎨 Tema
+    </button>
+    <div class="theme-dropdown" id="theme-dropdown"><!-- llenado por JS --></div>
+  </div>
+</header>
+
+<!-- ════════════════════════════════════════════════════════════
+     LAYOUT: SIDEBAR + CONTENT
+════════════════════════════════════════════════════════════ -->
+<div class="main">
+
+  <!-- ─── SIDEBAR ──────────────────────────────────────────── -->
+  <aside class="sidebar">
+
+    <!-- Búsqueda rápida -->
+    <div class="s-section">
+      <div class="s-label">Buscar SKU o producto</div>
+      <div class="scan-input-wrap">
+        <span class="icon">🔍</span>
+        <input id="input-sku" class="scan-input" type="text" placeholder="SKU o nombre…"
+               oninput="RecepcionController.buscarSKULive(this.value)">
+      </div>
+      <div id="search-results" class="search-results"></div>
+    </div>
+
+    <!-- Descripción -->
+    <div class="s-section">
+      <div class="s-label">Descripción del producto</div>
+      <input id="input-desc" type="text" placeholder="Nombre del producto…">
+    </div>
+
+    <!-- Tipo de mercancía -->
+    <div class="s-section">
+      <div class="s-label">Tipo de mercancía</div>
+      <div class="tipo-selector">
+        <button class="tipo-btn active" data-tipo="caja" onclick="RecepcionController.setTipo('caja',this)">
+          <span class="tipo-icon">📦</span>Caja
+        </button>
+        <button class="tipo-btn" data-tipo="tarima" onclick="RecepcionController.setTipo('tarima',this)">
+          <span class="tipo-icon">🏗️</span>Tarima
+        </button>
+        <button class="tipo-btn" data-tipo="suelto" onclick="RecepcionController.setTipo('suelto',this)">
+          <span class="tipo-icon">🔹</span>Suelto
+        </button>
+      </div>
+    </div>
+
+    <!-- Dimensiones (opcionales) -->
+    <div class="s-section">
+      <div class="s-label">Dimensiones (cm) — opcional</div>
+      <div class="row3">
+        <div class="field"><label>Largo</label><input id="input-largo" type="number" placeholder="100"></div>
+        <div class="field"><label>Ancho</label><input id="input-ancho" type="number" placeholder="40"></div>
+        <div class="field"><label>Alto</label><input id="input-alto"  type="number" placeholder="90"></div>
+      </div>
+    </div>
+
+    <!-- Acciones -->
+    <div class="s-section">
+      <div class="btn-row" style="flex-direction:column">
+        <button id="btn-voz" class="btn full" title="Hablar con el sistema">
+          🎤 Modo voz
+        </button>
+        <button id="btn-calcular" class="btn primary full" onclick="RecepcionController.calcular()">
+          ⚡ Sugerir ubicación
+        </button>
+        <button class="btn full" onclick="RecepcionController.simular()">
+          🎲 Demo aleatoria
+        </button>
+        <button class="btn full" onclick="RecepcionController.limpiar()">
+          🗑️ Limpiar
+        </button>
+      </div>
+    </div>
+
+    <!-- Última asignación -->
+    <div class="s-section">
+      <div class="s-label">Última asignación</div>
+      <div class="last-assign-box" id="last-assign">
+        <span style="color:var(--dim)">Sin asignaciones aún</span>
+      </div>
+    </div>
+
+    <!-- Score de salud mini -->
+    <div class="s-section">
+      <div class="s-label">Salud del almacén</div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <span id="score-salud-mini" style="font-family:var(--mono);font-size:28px;font-weight:700"></span>
+        <div style="flex:1">
+          <div class="salud-barra-wrap"><div id="barra-salud-mini" style="height:6px;border-radius:100px;transition:width 1s ease"></div></div>
+          <div id="desc-salud-mini" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
+        </div>
+      </div>
+    </div>
+
+  </aside><!-- /sidebar -->
+
+  <!-- ─── CONTENIDO ─────────────────────────────────────────── -->
+  <main class="content">
+
+    <!-- ══════════════════════════════════════════════════════
+         PANEL: RECEPCIÓN GUIADA
+    ══════════════════════════════════════════════════════ -->
+    <section id="panel-recepcion" class="content-panel active">
+
+      <div class="panel-head">
+        <h2>Recepción guiada</h2>
+        <p class="sub">SmartSlot te dice exactamente dónde colocar cada producto que llega, en menos de 1 segundo.</p>
+      </div>
+
+      <!-- Onboarding: qué hace el sistema en 3 pasos -->
+      <div class="recepcion-help">
+        <div class="help-step">
+          <div class="help-step-num">1</div>
+          <h4>Llega mercancía</h4>
+          <p>El operador escanea o teclea el SKU del producto recibido (o lo dicta con el micrófono).</p>
+        </div>
+        <div class="help-step">
+          <div class="help-step-num">2</div>
+          <h4>SmartSlot calcula</h4>
+          <p>El motor evalúa espacio libre, cercanía a despacho, qué tanto se vende y la zona del cliente.</p>
+        </div>
+        <div class="help-step">
+          <div class="help-step-num">3</div>
+          <h4>Recibe el Top 3</h4>
+          <p>Te muestra las 3 mejores ubicaciones con su razón. Confirmas y queda registrado.</p>
+        </div>
+      </div>
+
+      <!-- Sugerencias Top 3 -->
+      <div id="panel-sugerencias"></div>
+
+      <!-- Estado vacío inicial -->
+      <div id="estado-vacio" style="text-align:center;padding:60px 20px;color:var(--dim)">
+        <div style="font-size:48px;margin-bottom:16px">📦</div>
+        <div style="font-size:16px;margin-bottom:8px;color:var(--muted)">Listo para recibir mercancía</div>
+        <div style="font-size:13px">Ingresa un SKU en el panel izquierdo o usa el modo voz</div>
+        <div style="margin-top:24px;display:flex;gap:12px;justify-content:center;flex-wrap:wrap">
+          <button class="btn" onclick="document.getElementById('input-sku').value='13488';RecepcionController.calcular()">
+            Probar: Cápsulas Café Robusto
+          </button>
+          <button class="btn" onclick="document.getElementById('input-sku').value='22248';RecepcionController.calcular()">
+            Probar: Pesto Albahaca Jüsto
+          </button>
+          <button class="btn" onclick="document.getElementById('input-sku').value='12658';RecepcionController.calcular()">
+            Probar: Cereal Lucky Charms
+          </button>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ══════════════════════════════════════════════════════
+         PANEL: MAPA DEL ALMACÉN
+    ══════════════════════════════════════════════════════ -->
+    <section id="panel-mapa" class="content-panel">
+
+      <!-- Barra de herramientas del mapa -->
+      <div class="map-title-row">
+        <div>
+          <h2 class="map-title">Mapa del almacén</h2>
+          <p style="color:var(--muted);font-size:13px;margin-top:2px">
+            Cada columna es un pasillo (AP–MP). El color indica qué tan llena está cada ubicación.
+          </p>
+        </div>
+        <button class="btn-3d" onclick="Mapa3DController.abrir()">
+          🧊 Ver en 3D
+        </button>
+        <div class="map-legend">
+          <div class="legend-item"><div class="legend-dot" style="background:var(--green);opacity:.5"></div>Libre</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div>&lt;50%</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--amber)"></div>50-90%</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div>&gt;90% lleno</div>
+          <div class="legend-item"><div class="legend-dot" style="background:var(--purple)"></div>En ruta</div>
+        </div>
+      </div>
+
+      <!-- Tarjeta: cómo leer el mapa -->
+      <div class="map-help-card">
+        <div class="map-help-icon">💡</div>
+        <div>
+          <strong>¿Cómo leer este mapa?</strong>
+          <p>Es la vista de planta del almacén de Justo. Cada <b>columna</b> es un pasillo (AP el más cercano a despacho, MP el más lejano) y cada <b>casilla</b> es una ubicación física. El color te dice de un vistazo dónde hay espacio: <span style="color:var(--green)">verde = libre</span>, <span style="color:var(--amber)">amarillo = medio</span>, <span style="color:var(--red)">rojo = casi lleno</span>. Cuando pides una sugerencia en Recepción, la ubicación recomendada parpadea aquí en <span style="color:var(--amber)">dorado</span>.</p>
+        </div>
+        <button class="map-help-close" onclick="this.parentElement.style.display='none'">✕</button>
+      </div>
+
+      <!-- Búsqueda en mapa -->
+      <div class="map-search-row">
+        <input id="map-search" type="text" placeholder="Buscar celda (ej. AP29) o producto en el mapa…"
+               oninput="MapaController.buscar(this.value)">
+        <button class="btn" onclick="MapaController.buscar(document.getElementById('map-search').value)">Buscar</button>
+      </div>
+
+      <!-- Locator banner -->
+      <div id="map-locator">
+        <span>📍 Ubicación sugerida:</span>
+        <span id="map-locator-id">—</span>
+        <button class="btn" style="margin-left:auto;padding:4px 10px;font-size:11px"
+                onclick="MapaController.irACelda(document.getElementById('map-locator-id').textContent)">
+          Ir a celda
+        </button>
+      </div>
+
+      <!-- Filtros de ocupación -->
+      <div class="filter-bar">
+        <span style="font-size:11px;color:var(--muted)">Ocupación:</span>
+        <button class="filter-btn f-all active" onclick="MapaController.setFiltro('all',this)">Todos</button>
+        <button class="filter-btn f-free"  onclick="MapaController.setFiltro('free',this)">Libres</button>
+        <button class="filter-btn f-low"   onclick="MapaController.setFiltro('low',this)">&lt;50%</button>
+        <button class="filter-btn f-med"   onclick="MapaController.setFiltro('med',this)">50-90%</button>
+        <button class="filter-btn f-high"  onclick="MapaController.setFiltro('high',this)">&gt;90%</button>
+        <button class="filter-btn f-ruta"  onclick="MapaController.setFiltro('ruta',this)">En ruta</button>
+      </div>
+
+      <!-- Filtros por zona de cliente -->
+      <div class="filter-bar" style="margin-top:6px">
+        <span style="font-size:11px;color:var(--muted)">Zona cliente:</span>
+        <button class="filter-btn filter-zona" style="border-color:#3fb950;color:#3fb950"
+                onclick="MapaController.setFiltroZona('A',this)">🟢 A — Marca Propia</button>
+        <button class="filter-btn filter-zona" style="border-color:#06b6d4;color:#06b6d4"
+                onclick="MapaController.setFiltroZona('B',this)">🔵 B — Alta Rotación</button>
+        <button class="filter-btn filter-zona" style="border-color:#a855f7;color:#a855f7"
+                onclick="MapaController.setFiltroZona('C',this)">🟣 C — Grupo Nestlé</button>
+        <button class="filter-btn filter-zona" style="border-color:#fbbf24;color:#fbbf24"
+                onclick="MapaController.setFiltroZona('D',this)">🟡 D — Infantil/Baja rot.</button>
+        <button class="filter-btn filter-zona" style="border-color:#ef4444;color:#ef4444"
+                onclick="MapaController.setFiltroZona('E',this)">🔴 E — Desborde</button>
+      </div>
+
+      <!-- Indicador de zona de despacho -->
+      <div class="dispatch-hint">
+        <span class="dispatch-arrow">←</span> Más cerca de la zona de despacho (salida) · Más lejos
+        <span class="dispatch-arrow">→</span>
+      </div>
+
+      <!-- Banner de navegación — ruta desde recepción a celda sugerida -->
+      <div id="map-nav-banner" style="display:none;align-items:center;gap:8px;
+           background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);
+           padding:10px 14px;margin-bottom:8px;font-family:var(--mono);font-size:12px;
+           border-left:3px solid var(--green)">
+      </div>
+
+      <!-- Grid del mapa (las columnas las genera MapaController.construir) -->
+      <div class="map-wrap">
+        <div id="map-grid"></div>
+      </div>
+
+      <p style="color:var(--dim);font-size:11px;margin-top:10px;text-align:center">
+        Mostrando las primeras 30 posiciones de cada pasillo · Pasa el cursor sobre una casilla para ver el detalle
+      </p>
+
+    </section>
+
+    <!-- ══════════════════════════════════════════════════════
+         PANEL: DASHBOARD GERENCIAL
+    ══════════════════════════════════════════════════════ -->
+    <section id="panel-dashboard" class="content-panel">
+
+      <h2 style="font-size:18px;font-weight:600;margin-bottom:20px">Dashboard gerencial</h2>
+
+      <!-- Score de salud -->
+      <div class="salud-card">
+        <div>
+          <div style="font-size:11px;color:var(--muted);margin-bottom:4px;font-family:var(--mono);text-transform:uppercase;letter-spacing:1px">Score de salud</div>
+          <div class="salud-numero" id="score-salud">—</div>
+          <div style="font-size:11px;color:var(--muted)">/100</div>
+        </div>
+        <div class="salud-detalle">
+          <div id="desc-salud" style="font-size:13px;margin-bottom:8px"></div>
+          <div class="salud-barra-wrap"><div id="barra-salud"></div></div>
+          <div style="display:flex;gap:16px;margin-top:10px;font-size:11px;color:var(--muted)">
+            <span>Ubic. disponibles: <span id="ubic-disponibles" style="color:var(--green)"></span></span>
+            <span>Ubic. críticas: <span id="ubic-criticas" style="color:var(--red)"></span></span>
+            <span>En ruta activa: <span id="ubic-ruta" style="color:var(--purple)"></span></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- ROI en tiempo real -->
+      <div class="roi-panel">
+        <h3>💰 ROI en tiempo real — impacto de SmartSlot</h3>
+        <div class="roi-grid">
+          <div class="roi-item">
+            <div class="val" id="roi-diario">—</div>
+            <div class="lbl">Ahorro diario estimado</div>
+          </div>
+          <div class="roi-item">
+            <div class="val" id="roi-mensual">—</div>
+            <div class="lbl">Ahorro mensual</div>
+          </div>
+          <div class="roi-item">
+            <div class="val" id="roi-anual">—</div>
+            <div class="lbl">Ahorro anual proyectado</div>
+          </div>
+        </div>
+        <div class="roi-tiempo">
+          <span style="color:var(--muted)">Decisión por recepción:</span>
+          <span style="color:var(--red)" id="roi-tiempo-antes">—</span>
+          <span style="color:var(--muted)">→</span>
+          <span style="color:var(--green)" id="roi-tiempo-ahora">—</span>
+          <span style="color:var(--muted);margin-left:16px">Errores evitados/día:</span>
+          <span style="color:var(--cyan)" id="roi-errores">—</span>
+          <span style="color:var(--muted);margin-left:16px">Horas ahorradas/día:</span>
+          <span style="color:var(--amber)" id="roi-horas-ahorradas">—</span>
+        </div>
+      </div>
+
+      <!-- Métricas clave -->
+      <div class="metrics-row">
+        <div class="metric-card accent">
+          <div class="m-val" id="roi-recepciones">—</div>
+          <div class="m-lbl">Recepciones / día</div>
+        </div>
+        <div class="metric-card green">
+          <div class="m-val" id="sim-porcentaje">—</div>
+          <div class="m-lbl">Ahorro en metros (Nov)</div>
+        </div>
+        <div class="metric-card amber">
+          <div class="m-val" id="sim-metros-ahorro">—</div>
+          <div class="m-lbl">Metros ahorrados (Nov)</div>
+        </div>
+        <div class="metric-card purple">
+          <div class="m-val" id="total-ubicaciones">—</div>
+          <div class="m-lbl">Ubicaciones totales</div>
+        </div>
+      </div>
+
+      <!-- Grid: Simulador + Alertas -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+
+        <!-- Simulador de ahorro Noviembre -->
+        <div class="sim-panel">
+          <h3>📊 Simulador de ahorro · Noviembre 2025</h3>
+          <div class="sim-compare">
+            <div class="sim-box actual">
+              <div class="val" id="sim-metros-real">—</div>
+              <div class="lbl">Metros recorridos (real)</div>
+            </div>
+            <div class="sim-arrow">→</div>
+            <div class="sim-box smart">
+              <div class="val" id="sim-metros-smart">—</div>
+              <div class="lbl">Con SmartSlot</div>
+            </div>
+          </div>
+          <div class="sim-ahorro">
+            <div class="val" id="sim-ahorro-label">—</div>
+            <div class="lbl">metros ahorrados en noviembre</div>
+          </div>
+          <table class="data-table" style="margin-top:14px">
+            <thead>
+              <tr>
+                <th>SKU</th><th>Producto</th><th>Destino</th>
+                <th>Real</th><th>Óptimo</th><th>Ahorro</th>
+              </tr>
+            </thead>
+            <tbody id="sim-tabla-body"></tbody>
+          </table>
+        </div>
+
+        <!-- Alertas preventivas -->
+        <div class="alertas-panel">
+          <h3>⚠️ Alertas preventivas de llenado</h3>
+          <div id="lista-alertas"></div>
+        </div>
+
+      </div>
+
+      <!-- Reasignación preventiva -->
+      <div class="reasig-panel" style="margin-bottom:20px">
+        <h3 style="font-size:14px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:8px">
+          🔄 Reasignación preventiva
+          <span style="font-size:11px;font-weight:400;color:var(--muted)">
+            SKUs de alta rotación que conviene mover más cerca del despacho
+          </span>
+        </h3>
+        <div id="lista-reasignaciones"></div>
+      </div>
+
+      <!-- Waldo — Asistente IA -->
+      <div class="waldo-panel">
+        <div class="waldo-header">
+          <div class="waldo-avatar">🤖</div>
+          <div>
+            <div class="waldo-title">Waldo — Asistente de Almacén</div>
+            <div class="waldo-sub">Pregúntame cualquier cosa sobre el almacén de Justo</div>
+          </div>
+          <button class="btn" style="margin-left:auto;font-size:12px" onclick="WaldoService.limpiarHistorial();document.getElementById('waldo-chat').innerHTML=''">
+            Nueva conversación
+          </button>
+        </div>
+
+        <!-- Preguntas rápidas -->
+        <div class="waldo-preguntas">
+          <button class="waldo-q-btn" onclick="DashboardController.preguntaRapida('¿Cuánto dinero ahorraría Justo usando SmartSlot todo noviembre?')">
+            💰 ¿Cuánto ahorra Justo?
+          </button>
+          <button class="waldo-q-btn" onclick="DashboardController.preguntaRapida('¿Cuáles son los pasillos más críticos del almacén ahora mismo?')">
+            🔴 Pasillos críticos
+          </button>
+          <button class="waldo-q-btn" onclick="DashboardController.preguntaRapida('¿Qué recomiendas hacer para mejorar el score de salud del almacén?')">
+            📈 Cómo mejorar el almacén
+          </button>
+          <button class="waldo-q-btn" onclick="DashboardController.preguntaRapida('¿Qué ubicación se va a llenar más rápido?')">
+            ⏰ ¿Qué se llena primero?
+          </button>
+        </div>
+
+        <!-- Chat -->
+        <div id="waldo-chat">
+          <div class="chat-msg waldo">
+            <span>Hola, soy Waldo 👋 Estoy conectado a los datos reales del almacén de Justo.
+            Puedo responder preguntas sobre ocupación, ROI, rutas de picking y cualquier
+            cosa sobre la operación. ¿En qué te ayudo?</span>
+          </div>
+        </div>
+
+        <div class="waldo-input-row">
+          <input id="waldo-input" type="text" placeholder="Pregunta algo sobre el almacén…">
+          <button class="btn primary" onclick="DashboardController.enviarAWaldo()">Enviar</button>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- ══════════════════════════════════════════════════════
+         PANEL: RUTA DE PICKING
+    ══════════════════════════════════════════════════════ -->
+    <section id="panel-ruta" class="content-panel">
+
+      <h2 style="font-size:18px;font-weight:600;margin-bottom:20px">Ruta de picking activa</h2>
+
+      <div class="ruta-stats">
+        <div class="ruta-stat">
+          <div class="val" id="ruta-total">—</div>
+          <div class="lbl">Ubicaciones en ruta</div>
+        </div>
+        <div class="ruta-stat">
+          <div class="val" id="ruta-pct">—</div>
+          <div class="lbl">% del almacén activo</div>
+        </div>
+        <div class="ruta-stat">
+          <div class="val" id="ruta-pasillos">—</div>
+          <div class="lbl">Pasillos involucrados</div>
+        </div>
+      </div>
+
+      <div class="section-label">Distribución por pasillo</div>
+      <div class="ruta-dist-grid" id="ruta-dist"></div>
+
+      <div class="section-label" style="margin-top:16px">Detalle de la ruta</div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>#</th><th>SKU</th><th>Producto</th>
+            <th>Ubicación</th><th>Cantidad</th>
+          </tr>
+        </thead>
+        <tbody id="ruta-body"></tbody>
+      </table>
+
+    </section>
+
+    <!-- ══════════════════════════════════════════════════════
+         PANEL: HISTÓRICO DE OCUPACIÓN
+    ══════════════════════════════════════════════════════ -->
+    <section id="panel-historico" class="content-panel">
+
+      <h2 style="font-size:18px;font-weight:600;margin-bottom:20px">Histórico de ocupación por pasillo</h2>
+
+      <div id="hist-list" style="max-width:600px"></div>
+
+    </section>
+
+  </main><!-- /content -->
+</div><!-- /main -->
+
+<!-- ════════════════════════════════════════════════════════════
+     MODAL: MAPA 3D
+════════════════════════════════════════════════════════════ -->
+<div id="modal-3d">
+  <div class="modal-3d-content">
+    <div class="modal-3d-header">
+      <div class="modal-3d-title">🧊 Almacén 3D — <span>Justo</span></div>
+      <span style="font-size:12px;color:var(--muted)">Arrastra para rotar · Scroll para zoom · Hover para detalle</span>
+      <button class="modal-3d-close" onclick="Mapa3DController.cerrar()">✕</button>
+    </div>
+    <div class="modal-3d-body">
+      <canvas id="canvas-3d"></canvas>
+
+      <!-- HUD izquierdo -->
+      <div class="hud-3d hud-3d-left">
+        <div class="hud-card">
+          <h4>Almacén Justo</h4>
+          <div class="hud-stat"><span>Pasillos</span><b>AP – MP</b></div>
+          <div class="hud-stat"><span>Niveles</span><b>hasta 6</b></div>
+          <div class="hud-stat"><span>Ubicaciones</span><b id="hud-ubic">—</b></div>
+        </div>
+        <div class="hud-card">
+          <h4>Ocupación (columna)</h4>
+          <div class="hud-leg"><div class="dot" style="background:#166534"></div>0–25% vacío</div>
+          <div class="hud-leg"><div class="dot" style="background:#15803d"></div>26–50% bajo</div>
+          <div class="hud-leg"><div class="dot" style="background:#a16207"></div>51–75% medio</div>
+          <div class="hud-leg"><div class="dot" style="background:#c2410c"></div>76–90% alto</div>
+          <div class="hud-leg"><div class="dot" style="background:#b91c1c"></div>&gt;90% lleno</div>
+        </div>
+        <div class="hud-card">
+          <h4>Filtros</h4>
+          <div class="frow-3d">
+            <label>Ocup. mín</label>
+            <input type="range" min="0" max="95" value="0" step="5"
+                   oninput="Mapa3DController.setOcupacionMin(this.value)">
+            <span class="fv" id="f3d-p-val">0%</span>
+          </div>
+          <div class="frow-3d">
+            <label>Nivel mín</label>
+            <input type="range" min="1" max="6" value="1" step="1"
+                   oninput="Mapa3DController.setNivelMin(this.value)">
+            <span class="fv" id="f3d-z-val">N1</span>
+          </div>
+          <div style="margin-top:6px;color:var(--muted);font-size:11px">Pasillo</div>
+          <div class="aisle-grid-3d" id="aisle-grid-3d"></div>
+        </div>
+      </div>
+
+      <!-- HUD inferior -->
+      <div class="hud-3d hud-3d-bottom">
+        <button class="btn-3d-ctrl" onclick="Mapa3DController.resetCam()">↺ Reset</button>
+        <span class="sep-3d">|</span>
+        <button class="btn-3d-ctrl active" onclick="Mapa3DController.toggleRotacion(this)">⟳ Rotar</button>
+        <span class="sep-3d">|</span>
+        <button class="btn-3d-ctrl" onclick="Mapa3DController.setVista('top')">Planta</button>
+        <button class="btn-3d-ctrl" onclick="Mapa3DController.setVista('front')">Frontal</button>
+        <button class="btn-3d-ctrl" onclick="Mapa3DController.setVista('iso')">Isométrica</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="tip-3d"></div>
+
+<!-- Tooltip global -->
+<div id="tooltip"></div>
+
+<!-- Toast global -->
+<div id="toast"></div>
+
+<!-- ════════════════════════════════════════════════════════════
+     SCRIPTS — Orden de carga MVC estricto
+════════════════════════════════════════════════════════════ -->
+
+<!-- 1. Datos -->
+<script src="data/wms_data.js"></script>
+
+<!-- 2. Modelos -->
+<script src="assets/js/models/UbicacionModel.js"></script>
+<script src="assets/js/models/SKUModel.js"></script>
+
+<!-- 3. Servicios -->
+<script src="assets/js/services/ScoringService.js"></script>
+<script src="assets/js/services/SimuladorService.js"></script>
+<script src="assets/js/services/WaldoService.js"></script>
+<script src="assets/js/services/ThemeService.js"></script>
+
+<!-- 4. Controladores -->
+<script src="assets/js/controllers/MapaController.js"></script>
+<script src="assets/js/controllers/Mapa3DController.js"></script>
+<script src="assets/js/controllers/RecepcionController.js"></script>
+<script src="assets/js/controllers/DashboardController.js"></script>
+
+<!-- 5. Entry point (siempre último) -->
+<script src="assets/js/app.js"></script>
+
+<!-- ── Patches de inicialización específicos del HTML ──────── -->
+<script>
+/**
+ * Funciones que necesitan acceso al DOM del index.html
+ * Se ejecutan después de que app.js ya inicializó todo
+ */
+
+// showPanel global (navegación entre tabs)
+function showPanel(nombre, btnEl) {
+  document.querySelectorAll('.content-panel').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
+  document.getElementById('panel-' + nombre)?.classList.add('active');
+  if (btnEl) btnEl.classList.add('active');
+}
+
+// Inicialización extra post-DOMContentLoaded
+document.addEventListener('DOMContentLoaded', () => {
+
+  // ── Selector de temas ──────────────────────────────────────
+  const dropdown = document.getElementById('theme-dropdown');
+  if (dropdown) {
+    const swatchVars = {
+      midnight: ['#388bfd','#3fb950','#d29922'],
+      nebula:   ['#a855f7','#34d399','#fbbf24'],
+      ocean:    ['#06b6d4','#10b981','#f59e0b'],
+      forest:   ['#22c55e','#4ade80','#eab308'],
+      light:    ['#2563eb','#16a34a','#d97706']
+    };
+    dropdown.innerHTML = ThemeService.listar().map(t => `
+      <div class="theme-option ${t.id === 'midnight' ? 'active' : ''}" data-tema="${t.id}"
+           onclick="ThemeService.aplicar('${t.id}');document.getElementById('theme-dropdown').classList.remove('show')">
+        <span>${t.icono}</span>
+        <span>${t.nombre}</span>
+        <span class="theme-swatch" style="margin-left:auto">
+          ${swatchVars[t.id].map(c => `<span style="background:${c}"></span>`).join('')}
+        </span>
+      </div>`).join('');
+  }
+  // Cerrar dropdown al hacer click fuera
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.theme-selector')) {
+      document.getElementById('theme-dropdown')?.classList.remove('show');
+    }
+  });
+
+  // ── Botones de pasillo del 3D ──────────────────────────────
+  Mapa3DController.construirBotonesPasillo();
+
+  // ── HUD 3D: total ubicaciones ──────────────────────────────
+  const hudUbic = document.getElementById('hud-ubic');
+  if (hudUbic) hudUbic.textContent = UbicacionModel.obtenerTodas().length;
+
+  // ── Redimensionar 3D al cambiar tamaño de ventana ──────────
+  window.addEventListener('resize', () => Mapa3DController.redimensionar());
+
+
+  // ── Score de salud en sidebar ───────────────────────────────
+  const salud = SimuladorService.calcularScoreSalud();
+  const color = salud >= 70 ? 'var(--green)' : salud >= 40 ? 'var(--amber)' : 'var(--red)';
+
+  const mini = document.getElementById('score-salud-mini');
+  if (mini) { mini.textContent = salud; mini.style.color = color; }
+
+  const barraMini = document.getElementById('barra-salud-mini');
+  if (barraMini) { barraMini.style.width = salud + '%'; barraMini.style.background = color; }
+
+  const descMini = document.getElementById('desc-salud-mini');
+  if (descMini) descMini.textContent = salud >= 70 ? 'Buen estado' : salud >= 40 ? 'Requiere atención' : 'Estado crítico';
+
+  // ── Métricas de ubicaciones en dashboard ───────────────────
+  const disponibles = UbicacionModel.obtenerDisponibles().length;
+  const todas       = UbicacionModel.obtenerTodas();
+  const criticas    = todas.filter(c => (UbicacionModel.obtenerOcupacion(c) ?? 0) >= 90).length;
+  const enRuta      = WMS_DATA.rutaActiva.length;
+
+  const setEl = (id, val) => { const el = document.getElementById(id); if (el) el.textContent = val; };
+  setEl('ubic-disponibles', disponibles);
+  setEl('ubic-criticas',    criticas);
+  setEl('ubic-ruta',        enRuta);
+  setEl('total-ubicaciones',todas.length);
+
+  // ── Simulador: label de ahorro completo ────────────────────
+  const ahorro = SimuladorService.calcularAhorroNoviembre();
+  setEl('sim-ahorro-label', ahorro.metrosAhorrados.toLocaleString('es-MX') + 'm');
+
+  // ── Ruta: estadísticas ─────────────────────────────────────
+  const rutaCeldas  = WMS_DATA.rutaActiva;
+  const rutaDist    = {};
+  rutaCeldas.forEach(c => {
+    const p = c.replace(/\d.*$/, '');
+    rutaDist[p] = (rutaDist[p] || 0) + 1;
+  });
+
+  setEl('ruta-total',    rutaCeldas.length);
+  setEl('ruta-pct',      Math.round(rutaCeldas.length / todas.length * 100) + '%');
+  setEl('ruta-pasillos', Object.keys(rutaDist).length);
+
+  const distEl = document.getElementById('ruta-dist');
+  if (distEl) {
+    Object.entries(rutaDist).sort((a,b) => b[1]-a[1]).forEach(([p, cnt]) => {
+      distEl.innerHTML += `<div style="background:var(--bg3);border:1px solid var(--border);border-radius:var(--r);padding:6px 12px;font-size:12px;font-family:var(--mono)">
+        <span style="color:var(--purple)">${p}</span> <span style="color:var(--muted)">${cnt}</span>
+      </div>`;
+    });
+  }
+
+  // ── Ruta: tabla detalle ────────────────────────────────────
+  const RUTA_LINES = [
+    {seq:1, sku:'10366',ubic:'AP/Existencias/CP18N3', prod:'Atún Dolores en Agua 295g',cant:192},
+    {seq:2, sku:'28871',ubic:'AP/Existencias/AP29N1', prod:'Agua Manantial Santa María 24x355ml',cant:23},
+    {seq:3, sku:'30225',ubic:'AP/Existencias/BP29N1', prod:'Galletas Anatinas Gisa Tres Sabores 375g',cant:10},
+    {seq:4, sku:'18362',ubic:'AP/Existencias/BP30N2', prod:'Suavizante Kuxtal Biodegradable 2L',cant:12},
+    {seq:5, sku:'15652',ubic:'AP/Existencias/AP31N1', prod:'Servilletas Kleenex Daily 180 pzas',cant:16},
+    {seq:6, sku:'12219',ubic:'AP/Existencias/BP32N1', prod:'Ate de Guayaba La Costeña 700g',cant:12},
+    {seq:7, sku:'30734',ubic:'AP/Existencias/AP33N2', prod:'Leche de Chocolate Yomi Lala 180ml',cant:27},
+    {seq:8, sku:'10369',ubic:'AP/Existencias/BP33N1', prod:'Chiles Jalapeños La Costeña 780g',cant:12},
+    {seq:9, sku:'10210',ubic:'AP/Existencias/BP34N1', prod:'Mayonesa McCormick con Limón 507g',cant:24},
+    {seq:10,sku:'26186',ubic:'AP/Existencias/BP34N2', prod:'Limpiador Pato Aroma Fresco 500ml',cant:12},
+  ];
+
+  const tbody = document.getElementById('ruta-body');
+  if (tbody) {
+    tbody.innerHTML = RUTA_LINES.map(r => `
+      <tr>
+        <td style="color:var(--muted)">${r.seq}</td>
+        <td style="font-family:var(--mono);color:var(--accent)">${r.sku}</td>
+        <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${r.prod}</td>
+        <td style="font-family:var(--mono);color:var(--cyan)">${r.ubic}</td>
+        <td style="font-family:var(--mono)">${r.cant}</td>
+      </tr>`).join('');
+  }
+
+  // ── Histórico: barras por pasillo ──────────────────────────
+  const aisleOcc = {}, aisleCount = {};
+  todas.forEach(c => {
+    const p = c.replace(/\d.*$/, '');
+    const o = UbicacionModel.obtenerOcupacion(c) ?? 0;
+    aisleOcc[p]   = (aisleOcc[p]   || 0) + o;
+    aisleCount[p] = (aisleCount[p] || 0) + 1;
+  });
+
+  const histEl = document.getElementById('hist-list');
+  if (histEl) {
+    histEl.innerHTML = Object.entries(aisleOcc)
+      .map(([p, sum]) => ({ p, avg: Math.round(sum / aisleCount[p]), cnt: aisleCount[p] }))
+      .sort((a,b) => b.avg - a.avg)
+      .map(({ p, avg, cnt }) => {
+        const c = avg >= 80 ? 'var(--red)' : avg >= 40 ? 'var(--amber)' : 'var(--green)';
+        return `<div class="hist-item">
+          <span style="font-family:var(--mono);font-size:14px;font-weight:600;color:var(--accent);width:40px">${p}</span>
+          <div style="flex:1">
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+              <span style="font-size:12px">${cnt} posiciones</span>
+              <span style="font-size:12px;font-family:var(--mono);color:${c}">${avg}%</span>
+            </div>
+            <div class="bar-wrap"><div class="bar" style="width:${avg}%;background:${c}"></div></div>
+          </div>
+        </div>`;
+      }).join('');
+  }
+
+  // ── RecepcionController: búsqueda en vivo sidebar ──────────
+  RecepcionController.buscarSKULive = (v) => {
+    const sr = document.getElementById('search-results');
+    if (!sr) return;
+    if (!v || v.length < 2) { sr.classList.remove('show'); return; }
+
+    const q = v.toLowerCase();
+    const resultados = [];
+    for (const [celda, prod] of Object.entries(WMS_DATA.productos)) {
+      if (prod.toLowerCase().includes(q) || celda.toLowerCase().includes(q)) {
+        resultados.push({ celda, prod });
+        if (resultados.length >= 6) break;
+      }
+    }
+
+    if (!resultados.length) { sr.classList.remove('show'); return; }
+
+    sr.innerHTML = resultados.map(r => `
+      <div class="search-item" onclick="
+        document.getElementById('input-sku').value='${r.celda}';
+        document.getElementById('input-desc').value='${r.prod.replace(/'/g,"\\'")}';
+        document.getElementById('search-results').classList.remove('show');
+        RecepcionController.calcular();
+      ">
+        <div class="si-sku">${r.celda} — ${WMS_DATA.ocupacion[r.celda] ?? '—'}% ocupado</div>
+        <div class="si-loc">${r.prod}</div>
+      </div>`).join('');
+    sr.classList.add('show');
+  };
+
+  // ── RecepcionController: simular ───────────────────────────
+  RecepcionController.simular = () => {
+    // Usa productos del acomodo histórico para demos más realistas
+    const demos = WMS_DATA.acomodoNoviembre;
+    const demo  = demos[Math.floor(Math.random() * demos.length)];
+    document.getElementById('input-sku').value  = demo.sku;
+    document.getElementById('input-desc').value = demo.producto;
+    RecepcionController.calcular();
+  };
+
+  // ── RecepcionController: ocultar estado vacío ──────────────
+  const calcularOrig = RecepcionController.calcular.bind(RecepcionController);
+  RecepcionController.calcular = function() {
+    document.getElementById('estado-vacio')?.style.setProperty('display','none');
+    calcularOrig();
+  };
+
+  // ── MapaController: búsqueda en mapa ──────────────────────
+  MapaController.buscar = (v) => {
+    if (!v) return;
+    const q  = v.toUpperCase().replace(/\s/g,'');
+    const el = document.getElementById('cell-' + q);
+    if (el) {
+      MapaController.irACelda(q);
+      const locator   = document.getElementById('map-locator');
+      const locatorId = document.getElementById('map-locator-id');
+      if (locator && locatorId) { locatorId.textContent = q; locator.style.display = 'flex'; }
+    } else {
+      RecepcionController.mostrarToast('Celda "' + q + '" no encontrada en el mapa', 'warn');
+    }
+  };
+
+  // ── RecepcionController: confirmar actualiza sidebar ───────
+  const confirmarOrig = RecepcionController.confirmar.bind(RecepcionController);
+  RecepcionController.confirmar = function(celda) {
+    confirmarOrig(celda);
+    const prod = WMS_DATA.productos[celda] || document.getElementById('input-desc')?.value || '—';
+    const lastEl = document.getElementById('last-assign');
+    if (lastEl) lastEl.innerHTML = `
+      <span style="font-family:var(--mono);color:var(--green);font-size:14px">${celda}</span><br>
+      <span style="color:var(--muted);font-size:11px">${prod.substring(0,45)}</span>`;
+  };
+
+});
+</script>
+
+</body>
+</html>
