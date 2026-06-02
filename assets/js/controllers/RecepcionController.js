@@ -100,7 +100,10 @@ const RecepcionController = (() => {
 
           <div class="result-actions">
             <button class="btn" onclick="RecepcionController.verEnMapa('${s.celda}')">
-              Ver en mapa
+              🗺️ Ver en mapa
+            </button>
+            <button class="btn" onclick="Mapa3DController.irACelda3D('${s.celda}')">
+              🧊 Ver en 3D
             </button>
             <button class="btn primary" onclick="RecepcionController.confirmar('${s.celda}')">
               ✓ Confirmar ubicación

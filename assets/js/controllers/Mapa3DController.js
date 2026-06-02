@@ -35,11 +35,15 @@ const Mapa3DController = (() => {
   /* ─── Filtros ───────────────────────────────────────────────── */
   let _fP = 0, _fZ = 1, _fAisle = 0;
 
+  /* ─── Highlight de celda ────────────────────────────────────── */
+  let _hlMesh = null, _hlEdges = null, _hlBeam = null;
+  let _hlRaf  = null, _hlT = 0;
+
   /* ─── Geometría del almacén ─────────────────────────────────── */
   const SW       = 1.4;   // ancho de estantería
   const SH       = 2.0;   // altura por nivel
   const SD       = 0.95;  // profundidad de celda
-  const AISLE_W  = 10;    // corredor caminable entre pasillos
+  const AISLE_W  = 3.5;   // corredor caminable entre pasillos
   const SLOT     = SW + AISLE_W;
 
   const AISLES = {
@@ -58,35 +62,107 @@ const Mapa3DController = (() => {
    13: {name:'MP', yMax:76,  zMax:6, wx: SLOT*12 }
   };
 
-  // Mismos colores que el mapa 2D: --green / --amber / --red
-  const COLOR_BUCKETS = [0x3fb950, 0xd29922, 0xf85149];
+  // Mismos 5 estados que el mapa 2D
+  const COLOR_BUCKETS = [0x166534, 0x15803d, 0xa16207, 0xb91c1c, 0x7c3aed];
+  //                      free      low       med       high      ruta
 
-  const _getBucket = (p) => {
-    if (p < 50) return 0x3fb950;   // verde  — libre / baja ocupación
-    if (p < 90) return 0xd29922;   // ámbar  — ocupación media
-    return 0xf85149;               // rojo   — ocupación alta
+  const _getBucket = (p, enRuta = false) => {
+    if (enRuta)  return 0x7c3aed;  // purple — en ruta picking
+    if (p < 20)  return 0x166534;  // verde oscuro — libre
+    if (p < 50)  return 0x15803d;  // verde — bajo
+    if (p < 90)  return 0xa16207;  // ámbar — medio
+    return 0xb91c1c;               // rojo  — alto/crítico
   };
 
   /* ─── Generación del lookup de celdas ──────────────────────── */
   const _generarLookup = () => {
-    const lookup = {};
-    const pidx = {AP:1,BP:2,CP:3,DP:4,EP:5,FP:6,GP:7,HP:8,IP:9,JP:10,KP:11,LP:12,MP:13};
+    const lookup  = {};
+    const pidx    = {AP:1,BP:2,CP:3,DP:4,EP:5,FP:6,GP:7,HP:8,IP:9,JP:10,KP:11,LP:12,MP:13};
+    const enRutaSet = new Set(WMS_DATA.rutaActiva || []);
+
     Object.entries(WMS_DATA.ocupacion).forEach(([celda, occ]) => {
       const pasillo  = celda.replace(/\d.*$/, '');
       const posicion = parseInt(celda.replace(/^[A-Z]+/, ''), 10);
       const xi = pidx[pasillo];
       if (!xi || !posicion) return;
-      const ais = AISLES[xi];
+      const ais    = AISLES[xi];
       if (posicion > ais.yMax) return;
-      const producto = WMS_DATA.productos[celda] || '—';
-      const niveles  = Math.min(ais.zMax, 3);
+      const prod   = WMS_DATA.productos[celda] || '—';
+      const enRuta = enRutaSet.has(celda);
+      const niveles = Math.min(ais.zMax, 3);
       for (let zi = 1; zi <= niveles; zi++) {
-        const pct  = Math.max(0, Math.min(100, occ + (zi * 3 - 5)));
+        const pct  = Math.max(0, Math.min(100, occ + (zi - 1) * 2));
         const cant = Math.round(pct * 3.8 + 20);
-        lookup[`${xi}_${posicion}_${zi}`] = [pct, cant, producto];
+        lookup[`${xi}_${posicion}_${zi}`] = [pct, cant, prod, enRuta];
       }
     });
     return lookup;
+  };
+
+  /* ─── Highlight de celda 3D ────────────────────────────────── */
+
+  const _clearHighlight = () => {
+    if (_hlRaf) { cancelAnimationFrame(_hlRaf); _hlRaf = null; }
+    [_hlMesh, _hlEdges, _hlBeam].forEach(m => {
+      if (m && _scene) {
+        _scene.remove(m);
+        m.geometry?.dispose();
+        m.material?.dispose();
+      }
+    });
+    _hlMesh = _hlEdges = _hlBeam = null;
+  };
+
+  const _highlightCell = (wx, wy, wz, aisZMax) => {
+    const THREE = _THREE_ref;
+    if (!THREE || !_scene) return;
+    _clearHighlight();
+
+    const colH = aisZMax * SH;          // altura total del rack en esa columna
+    const cy   = colH / 2 + 0.04;       // centro vertical del bloque
+
+    // Caja semitransparente que envuelve toda la columna del lote
+    const boxGeo = new THREE.BoxGeometry(SW * 1.22, colH + 0.1, SD * 1.22);
+    const boxMat = new THREE.MeshBasicMaterial({
+      color: 0x56d3ba, transparent: true, opacity: 0.22, depthWrite: false
+    });
+    _hlMesh = new THREE.Mesh(boxGeo, boxMat);
+    _hlMesh.position.set(wx, cy, wz);
+    _scene.add(_hlMesh);
+
+    // Wireframe de aristas para contorno nítido
+    const edgesGeo = new THREE.EdgesGeometry(boxGeo);
+    const edgesMat = new THREE.LineBasicMaterial({ color: 0x56d3ba, linewidth: 2 });
+    _hlEdges = new THREE.LineSegments(edgesGeo, edgesMat);
+    _hlEdges.position.set(wx, cy, wz);
+    _scene.add(_hlEdges);
+
+    // Rayo de luz vertical (beacon) que asciende desde el techo del rack
+    const beamGeo = new THREE.CylinderGeometry(0.08, 0.35, 18, 8, 1, true);
+    const beamMat = new THREE.MeshBasicMaterial({
+      color: 0x56d3ba, transparent: true, opacity: 0.18,
+      side: THREE.DoubleSide, depthWrite: false
+    });
+    _hlBeam = new THREE.Mesh(beamGeo, beamMat);
+    _hlBeam.position.set(wx, colH + 9, wz);
+    _scene.add(_hlBeam);
+
+    // Animación de pulso
+    _hlT = 0;
+    const pulse = () => {
+      _hlT += 0.04;
+      const s = 0.15 + Math.abs(Math.sin(_hlT)) * 0.18;
+      boxMat.opacity  = s;
+      beamMat.opacity = s * 0.8;
+      const sc = 1 + Math.sin(_hlT * 1.2) * 0.04;
+      _hlMesh.scale.set(sc, 1, sc);
+      _hlEdges.scale.set(sc, 1, sc);
+      _hlRaf = requestAnimationFrame(pulse);
+    };
+    _hlRaf = requestAnimationFrame(pulse);
+
+    // Auto-apagar a los 6 segundos
+    setTimeout(_clearHighlight, 6000);
   };
 
   /* ─── Construcción de la escena ─────────────────────────────── */
@@ -168,11 +244,12 @@ const Mapa3DController = (() => {
           if (cell) { tot += cell[0]; cnt++; }
         }
         if (!cnt) continue;
-        const colColor = _getBucket(tot / cnt);
+        const anyRuta  = Array.from({length: ais.zMax}, (_,i) => LOOKUP[`${xi}_${yi}_${i+1}`]).some(c => c?.[3]);
+        const colColor = _getBucket(tot / cnt, anyRuta);
         for (let zi = 1; zi <= ais.zMax; zi++) {
           const cell = LOOKUP[`${xi}_${yi}_${zi}`];
           if (!cell) continue;
-          const [pct, cant, prod] = cell;
+          const [pct, cant, prod, enRuta] = cell;
           _instData[colColor].push({
             wx: ais.wx + SW / 2,
             wy: (zi - 1) * SH + SH / 2 + 0.04,
@@ -316,9 +393,21 @@ const Mapa3DController = (() => {
     _cam.lookAt(t);
   };
 
+  /* ─── Etiqueta de posición en HUD ──────────────────────────── */
+  const _updateFPLabel = () => {
+    const label = document.getElementById('fp-pos-label');
+    if (!label) return;
+    let nearName = '—', minD = Infinity;
+    for (let xi = 1; xi <= 13; xi++) {
+      const d = Math.abs(_walkX - (AISLES[xi].wx + SW + AISLE_W / 2));
+      if (d < minD) { minD = d; nearName = AISLES[xi].name; }
+    }
+    label.textContent = `Pasillo ${nearName} · Pos. ${Math.max(0, Math.round(_walkZ / SD))}`;
+  };
+
   /* ─── Procesar WASD en walk mode ────────────────────────────── */
   const _processWASD = () => {
-    const spd = _walkSpeed;
+    const spd  = _keys['shift'] ? _walkSpeed * 2.5 : _walkSpeed;
     const fwdX = Math.sin(_walkYaw), fwdZ = Math.cos(_walkYaw);
     const rgtX = Math.cos(_walkYaw), rgtZ = -Math.sin(_walkYaw);
 
@@ -326,6 +415,7 @@ const Mapa3DController = (() => {
     if (_keys['s'] || _keys['arrowdown'])  { _walkX -= fwdX*spd; _walkZ -= fwdZ*spd; }
     if (_keys['a'] || _keys['arrowleft'])  { _walkX -= rgtX*spd; _walkZ -= rgtZ*spd; }
     if (_keys['d'] || _keys['arrowright']) { _walkX += rgtX*spd; _walkZ += rgtZ*spd; }
+    _updateFPLabel();
   };
 
   /* ─── Lerp de cámara orbit ──────────────────────────────────── */
@@ -370,14 +460,31 @@ const Mapa3DController = (() => {
     canvas.addEventListener('mouseup',    () => { orbitDrag = false; _lookDrag = false; canvas.style.cursor = ''; });
     canvas.addEventListener('mouseleave', () => { orbitDrag = false; _lookDrag = false; if (tip) tip.style.display = 'none'; });
 
+    /* ── Pointer lock: activa/desactiva mirar libre en walk mode ── */
+    canvas.addEventListener('click', () => {
+      if (_walkMode && !document.pointerLockElement) canvas.requestPointerLock();
+    });
+    document.addEventListener('pointerlockchange', () => {
+      const hint = document.getElementById('fp-click-hint');
+      if (!hint) return;
+      hint.style.display = (_walkMode && !document.pointerLockElement) ? 'block' : 'none';
+    });
+
     /* ── Mouse move ──────────────────────────────────────────── */
     canvas.addEventListener('mousemove', e => {
       const dx = e.clientX - oLastX, dy = e.clientY - oLastY;
 
-      if (_walkMode && _lookDrag) {
-        _walkYaw   -= (e.clientX - _lookLastX) * 0.003;
-        _walkPitch  = Math.max(-1.2, Math.min(1.2, _walkPitch + (e.clientY - _lookLastY) * 0.003));
-        _lookLastX  = e.clientX; _lookLastY = e.clientY;
+      if (_walkMode) {
+        if (document.pointerLockElement === canvas) {
+          // Pointer lock activo: mirar libre sin mantener botón
+          _walkYaw   -= e.movementX * 0.003;
+          _walkPitch  = Math.max(-1.2, Math.min(1.2, _walkPitch + e.movementY * 0.003));
+        } else if (_lookDrag) {
+          // Fallback: arrastrar con botón presionado
+          _walkYaw   -= (e.clientX - _lookLastX) * 0.003;
+          _walkPitch  = Math.max(-1.2, Math.min(1.2, _walkPitch + (e.clientY - _lookLastY) * 0.003));
+          _lookLastX  = e.clientX; _lookLastY = e.clientY;
+        }
         return;
       }
 
@@ -578,8 +685,9 @@ const Mapa3DController = (() => {
 
     cerrar() {
       document.getElementById('modal-3d')?.classList.remove('show');
-      // Limpia keys al cerrar para no quedarse con teclas presionadas
       _keys = {};
+      if (_walkMode) { _walkMode = false; document.getElementById('fp-hud').style.display = 'none'; }
+      if (document.pointerLockElement) document.exitPointerLock();
     },
 
     /** Alterna entre modo orbit y modo walk (primera persona) */
@@ -587,21 +695,35 @@ const Mapa3DController = (() => {
       _walkMode = !_walkMode;
       _autoRot  = !_walkMode;
 
-      const btn = document.getElementById('btn-walk-mode');
+      const btn = document.getElementById('btn-fp-mode');
       if (btn) btn.classList.toggle('active', _walkMode);
 
-      const hud = document.getElementById('walk-hud');
-      if (hud) hud.style.display = _walkMode ? 'flex' : 'none';
+      const hud = document.getElementById('fp-hud');
+      if (hud) hud.style.display = _walkMode ? 'block' : 'none';
 
       if (_walkMode) {
-        // Pone la cámara en el centro del almacén al entrar
-        const ais = AISLES[7];
-        _walkX   = ais.wx + SW + AISLE_W / 2;
-        _walkZ   = ais.yMax * SD * 0.4;
-        _walkYaw = 0; _walkPitch = 0;
-        _mostrarToastWalk('Walk mode — WASD para mover · arrastra para mirar · Esc para salir');
+        // Partir desde el pasillo/posición que la cámara orbit tiene como objetivo
+        let nearAisle = AISLES[7];
+        let minDist   = Infinity;
+        for (let xi = 1; xi <= 13; xi++) {
+          const d = Math.abs(_tx - (AISLES[xi].wx + SW / 2));
+          if (d < minDist) { minDist = d; nearAisle = AISLES[xi]; }
+        }
+        _walkX     = nearAisle.wx + SW + AISLE_W / 2;  // centro del corredor de ese pasillo
+        _walkZ     = Math.max(2, _tz);                  // misma profundidad que el lote visto
+        _walkYaw   = 0; _walkPitch = 0;
+        _walkSpeed = 0.3;
+        _updateFPLabel();
+        const canvas = document.getElementById('canvas-3d');
+        if (canvas) canvas.requestPointerLock();
+      } else {
+        if (document.pointerLockElement) document.exitPointerLock();
       }
     },
+
+    /** Alias público para el botón HTML */
+    entrarPrimeraPersona() { this.toggleWalk(); },
+    salirPrimeraPersona()  { if (_walkMode) this.toggleWalk(); },
 
     setOcupacionMin(v) {
       _fP = +v;
@@ -656,13 +778,14 @@ const Mapa3DController = (() => {
       _walkMode = false;
       _autoRot  = true;
       _keys     = {};
+      if (document.pointerLockElement) document.exitPointerLock();
       const totalW = SLOT * 13 + SW;
       _theta = -0.4; _phi = 0.9; _radius = 220;
       _tx = totalW/2 - SW/2; _ty = 3; _tz = AISLES[3].yMax*SD/2;
       _updateCam();
-      const btn = document.getElementById('btn-walk-mode');
+      const btn = document.getElementById('btn-fp-mode');
       if (btn) btn.classList.remove('active');
-      const hud = document.getElementById('walk-hud');
+      const hud = document.getElementById('fp-hud');
       if (hud) hud.style.display = 'none';
     },
 
@@ -687,6 +810,38 @@ const Mapa3DController = (() => {
       _cam.aspect = W / H;
       _cam.updateProjectionMatrix();
       _renderer.setSize(W, H);
+    },
+
+    /**
+     * Abre el modal 3D y vuela la cámara hasta la celda indicada.
+     * @param {string} celda — ej. "AP29", "CP144"
+     */
+    irACelda3D(celda) {
+      const pasillo  = celda.replace(/\d.*$/, '');
+      const posicion = parseInt(celda.replace(/^[A-Z]+/, ''), 10);
+      const pidx = { AP:1,BP:2,CP:3,DP:4,EP:5,FP:6,GP:7,HP:8,IP:9,JP:10,KP:11,LP:12,MP:13 };
+      const xi = pidx[pasillo];
+      if (!xi || !posicion) return;
+
+      const ais = AISLES[xi];
+      const wx  = ais.wx + SW / 2;
+      const wz  = Math.max(0, (posicion - 1) * SD);
+      const wy  = SH;
+
+      const fly = () => {
+        if (_walkMode) this.toggleWalk();
+        _startLerp({ tx: wx, ty: wy, tz: wz, theta: -0.5, phi: 0.58, radius: 22 });
+        _highlightCell(wx, wy, wz, ais.zMax);
+        _mostrarToastWalk(`📦 ${celda} — ${ais.name} pos. ${posicion}`);
+      };
+
+      this.abrir();
+
+      if (_iniciado) {
+        setTimeout(fly, 120);
+      } else {
+        const t = setInterval(() => { if (_iniciado) { clearInterval(t); fly(); } }, 80);
+      }
     },
 
     construirBotonesPasillo() {
