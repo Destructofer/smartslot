@@ -218,11 +218,13 @@
         <button class="map-help-close" onclick="this.parentElement.style.display='none'">✕</button>
       </div>
 
-      <!-- Búsqueda en mapa -->
+      <!-- Ir a lote -->
       <div class="map-search-row">
-        <input id="map-search" type="text" placeholder="Buscar celda (ej. AP29) o producto en el mapa…"
-               oninput="MapaController.buscar(this.value)">
-        <button class="btn" onclick="MapaController.buscar(document.getElementById('map-search').value)">Buscar</button>
+        <input id="map-search" type="text" placeholder="Ingresa un lote (ej. AP29, CP144)…"
+               onkeydown="if(event.key==='Enter') MapaController.buscar(this.value)">
+        <button class="btn primary" onclick="MapaController.buscar(document.getElementById('map-search').value)">
+          Ir →
+        </button>
       </div>
 
       <!-- Locator banner -->
@@ -280,7 +282,7 @@
       </div>
 
       <p style="color:var(--dim);font-size:11px;margin-top:10px;text-align:center">
-        Mostrando las primeras 30 posiciones de cada pasillo · Pasa el cursor sobre una casilla para ver el detalle
+        Pasa el cursor sobre una casilla para ver el detalle · Escribe el lote en el campo de arriba y pulsa Ir para localizarlo
       </p>
 
     </section>

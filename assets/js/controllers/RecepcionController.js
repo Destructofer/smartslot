@@ -226,10 +226,16 @@ const RecepcionController = (() => {
      * @param {string} celda
      */
     verEnMapa(celda) {
-      MapaController?.irACelda(celda);
-      // Cambia al panel del mapa
-      document.getElementById('panel-mapa')?.classList.add('active');
-      document.getElementById('panel-recepcion')?.classList.remove('active');
+      // Activar el panel del mapa (y su tab de navegación)
+      const tabMapa = document.querySelector('.nav-tab[onclick*="mapa"]');
+      showPanel('mapa', tabMapa);
+
+      // Esperar dos frames para que el panel sea visible antes de hacer scroll
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          MapaController?.irACelda(celda);
+        });
+      });
     },
 
     /**

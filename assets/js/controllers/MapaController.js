@@ -161,21 +161,19 @@ const MapaController = (() => {
     banner.style.display = 'flex';
 
     // Resaltar columna objetivo, atenuar las demás
-    document.querySelectorAll('.aisle-col').forEach(col => {
-      const h = col.querySelector('.aisle-col-header');
-      if (h && h.textContent.trim() === pasillo) {
-        col.classList.add('aisle-nav-target');
-        col.classList.remove('aisle-nav-dim');
+    document.querySelectorAll('#map-grid [data-aisle]').forEach(el => {
+      if (el.dataset.aisle === pasillo) {
+        el.classList.add('aisle-nav-target');
+        el.classList.remove('aisle-nav-dim');
       } else {
-        col.classList.add('aisle-nav-dim');
-        col.classList.remove('aisle-nav-target');
+        el.classList.add('aisle-nav-dim');
+        el.classList.remove('aisle-nav-target');
       }
     });
 
-    // Limpia el resaltado después de 6s
     setTimeout(() => {
-      document.querySelectorAll('.aisle-col').forEach(col => {
-        col.classList.remove('aisle-nav-target', 'aisle-nav-dim');
+      document.querySelectorAll('#map-grid [data-aisle]').forEach(el => {
+        el.classList.remove('aisle-nav-target', 'aisle-nav-dim');
       });
     }, 6000);
   };
@@ -195,20 +193,65 @@ const MapaController = (() => {
 
       grid.innerHTML = '';
 
-      // Configuración de pasillos: prefijo y nº de posiciones reales
-      const pasillos = [
-        ['AP', 88], ['BP', 88], ['CP', 90], ['DP', 90], ['EP', 86],
-        ['FP', 72], ['GP', 72], ['HP', 72], ['IP', 72], ['JP', 72],
-        ['KP', 72], ['LP', 72], ['MP', 76]
-      ];
+      const PASILLOS   = ['AP','BP','CP','DP','EP','FP','GP','HP','IP','JP','KP','LP','MP'];
+      const LIMITES    = { AP:88,BP:88,CP:272,DP:272,EP:86,FP:72,GP:72,HP:72,IP:72,JP:72,KP:72,LP:72,MP:72 };
+      const SUB_SET    = new Set(['CP','DP']);
+      const TOTAL_ROWS = 91;
 
-      // Límite visual de celdas por columna (todas iguales para alinear)
-      const LIMITE = 30;
-      pasillos.forEach(([p, maxPos]) => {
-        grid.appendChild(_crearColumna(p, maxPos, LIMITE));
+      // Fila de headers
+      PASILLOS.forEach(p => {
+        const h = document.createElement('div');
+        h.className     = 'map-header-cell';
+        h.textContent   = p;
+        h.dataset.aisle = p;
+        const zona = _zonaDelPasillo(p);
+        if (zona && ZONA_COLORES[zona]) {
+          h.style.background   = ZONA_COLORES[zona].bg;
+          h.style.borderBottom = `2px solid ${ZONA_COLORES[zona].border}`;
+          h.style.color        = ZONA_COLORES[zona].texto;
+          h.title              = `Zona ${zona} — ${ZONA_COLORES[zona].label}`;
+        }
+        grid.appendChild(h);
       });
 
-      console.log('[MapaController] Mapa construido (layout por columnas)');
+      // Filas de datos
+      for (let row = 1; row <= TOTAL_ROWS; row++) {
+        PASILLOS.forEach(p => {
+          if (SUB_SET.has(p)) {
+            const container     = document.createElement('div');
+            container.dataset.aisle = p;
+            let hasAny = false;
+
+            for (let sub = 1; sub <= 3; sub++) {
+              const num = (row - 1) * 3 + sub;
+              if (num <= LIMITES[p]) {
+                const id = `${p}${String(num).padStart(2,'0')}`;
+                const el = _crearCelda(id);
+                el.classList.add('sub-block');
+                container.appendChild(el);
+                hasAny = true;
+              }
+            }
+
+            container.className = hasAny ? 'sub-grid-container' : 'map-empty-cell';
+            grid.appendChild(container);
+          } else {
+            if (row <= LIMITES[p]) {
+              const id = `${p}${String(row).padStart(2,'0')}`;
+              const el = _crearCelda(id);
+              el.dataset.aisle = p;
+              grid.appendChild(el);
+            } else {
+              const empty = document.createElement('div');
+              empty.className     = 'map-empty-cell';
+              empty.dataset.aisle = p;
+              grid.appendChild(empty);
+            }
+          }
+        });
+      }
+
+      console.log('[MapaController] Mapa construido (layout grid)');
     },
 
     /**
@@ -276,28 +319,20 @@ const MapaController = (() => {
      * @param {string} celda
      * @returns {HTMLElement|null}
      */
-    _inyectarCelda(celda) {
-      const pasillo = celda.replace(/\d.*$/, '');
-      // Buscar la columna correcta por su header
-      const cols = document.querySelectorAll('.aisle-col');
-      let col = null;
-      cols.forEach(c => {
-        const h = c.querySelector('.aisle-col-header');
-        if (h && h.textContent === pasillo) col = c;
-      });
-      if (!col) return null;
-
-      // Separador "…" si no existe ya
-      if (!col.querySelector('.aisle-gap')) {
-        const gap = document.createElement('div');
-        gap.className = 'aisle-gap';
-        gap.textContent = '⋮';
-        col.appendChild(gap);
+    buscar(valor) {
+      const celda = valor?.trim().toUpperCase();
+      if (!celda) return;
+      const el = document.getElementById(`cell-${celda}`);
+      if (!el) {
+        RecepcionController?.mostrarToast(`Ubicación "${celda}" no encontrada`, 'warn');
+        return;
       }
+      this.irACelda(celda);
+    },
 
-      const el = _crearCelda(celda);
-      col.appendChild(el);
-      return el;
+    _inyectarCelda(celda) {
+      // Con el layout de grid todas las celdas están pre-renderizadas
+      return document.getElementById(`cell-${celda}`) || null;
     },
 
     /**
@@ -374,10 +409,11 @@ const MapaController = (() => {
       document.querySelectorAll('.filter-zona').forEach(b => b.classList.remove('active'));
       if (_filtroZona) btnEl?.classList.add('active');
 
-      document.querySelectorAll('.aisle-col').forEach(col => {
-        const colZona = col.dataset.zona;
-        col.style.opacity = (!_filtroZona || colZona === _filtroZona) ? '1' : '0.08';
-        col.style.pointerEvents = (!_filtroZona || colZona === _filtroZona) ? '' : 'none';
+      document.querySelectorAll('#map-grid [data-aisle]').forEach(el => {
+        const elZona  = _zonaDelPasillo(el.dataset.aisle);
+        const visible = !_filtroZona || elZona === _filtroZona;
+        el.style.opacity       = visible ? '1' : '0.08';
+        el.style.pointerEvents = visible ? '' : 'none';
       });
     },
 

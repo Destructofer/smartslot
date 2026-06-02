@@ -376,13 +376,13 @@ input:focus, select:focus { outline: none; border-color: var(--accent2); }
 .map-wrap { overflow-x: auto; padding-bottom: 12px; }
 
 #map-grid {
-  display: flex;
-  gap: 14px;
+  display: grid;
+  grid-template-columns: repeat(13, minmax(76px, 1fr));
+  gap: 4px;
   background: var(--bg2);
   padding: 20px;
   border-radius: var(--r2);
   border: 1px solid var(--border);
-  min-width: max-content;
 }
 
 /* Cada pasillo es una columna vertical */
@@ -416,9 +416,42 @@ input:focus, select:focus { outline: none; border-color: var(--accent2); }
   font-family: var(--mono);
 }
 
-/* Todas las celdas ahora son iguales y uniformes */
+/* Header de columna en layout de grid */
+.map-header-cell {
+  background: var(--bg4);
+  color: var(--text);
+  font-weight: 600;
+  font-family: var(--mono);
+  text-align: center;
+  padding: 8px 4px;
+  border-radius: var(--r);
+  font-size: 13px;
+  letter-spacing: 2px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+/* Contenedor de sub-celdas CP/DP */
+.sub-grid-container {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+/* Sub-celda CP/DP — más pequeña que las main cells */
+.sub-block {
+  aspect-ratio: unset !important;
+  height: 22px !important;
+  font-size: 9px !important;
+}
+
+/* Celda vacía: pasillo sin posición en esa fila */
+.map-empty-cell { visibility: hidden; }
+
+/* Celdas del mapa */
 .map-cell {
-  height: 42px;
+  aspect-ratio: 1 / 1;
   display: flex;
   align-items: center;
   justify-content: center;
